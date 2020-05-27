@@ -8,11 +8,14 @@
 
 #import "DiscoverViewController.h"
 #import "ChatroomListViewController.h"
+#import "DeviceTableViewController.h"
 #import <WFChatUIKit/WFChatUIKit.h>
 #import <WFChatClient/WFCCIMService.h>
 #import "DiscoverMomentsTableViewCell.h"
+#ifdef WFC_MOMENTS
 #import <WFMomentClient/WFMomentClient.h>
 #import <WFMomentUIKit/WFMomentUIKit.h>
+#endif
 #import "UIFont+YH.h"
 #import "UIColor+YH.h"
 
@@ -31,7 +34,8 @@
         @{@"title":LocalizedString(@"Channel"),
           @"image":@"chat_channel",@"des":@"channel"},
         @{@"title":LocalizedString(@"DevDocs"),
-          @"image":@"dev_docs",@"des":@"Dev"}]];
+          @"image":@"dev_docs",@"des":@"Dev"},@{@"title":@"Things",
+          @"image":@"discover_things",@"des":@"Things"}]];
     
     if(NSClassFromString(@"SDTimeLineTableViewController")) {
         [self.dataSource insertObject:@{@"title":LocalizedString(@"Moments"),@"image":@"AlbumReflashIcon",@"des":@"moment"} atIndex:0];
@@ -41,13 +45,12 @@
     }
     
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, self.view.frame.size.height) style:UITableViewStylePlain];
-    self.tableView.backgroundColor = [UIColor colorWithHexString:@"0xededed"];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
     
     self.tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 0.01)];
     [self.tableView reloadData];
-    
+    self.tableView.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
     [self.view addSubview:self.tableView];
     
 #ifdef WFC_MOMENTS
@@ -79,7 +82,7 @@
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
     UIView *view = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 9)];
-    view.backgroundColor = [UIColor colorWithHexString:@"0xededed"];
+    view.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
     return view;
 }
 
@@ -131,6 +134,12 @@
         vc.url = @"http://docs.wildfirechat.cn";
         [self.navigationController pushViewController:vc animated:YES];
     }
+    
+    if ([des isEqualToString:@"Things"]) {
+        DeviceTableViewController *vc = [[DeviceTableViewController alloc] init];
+        vc.hidesBottomBarWhenPushed = YES;
+        [self.navigationController pushViewController:vc animated:YES];
+    }
 
 }
 
@@ -140,6 +149,10 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     return 1;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayHeaderView:(UIView *)view forSection:(NSInteger)section {
+    view.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -160,7 +173,6 @@
     cell.accessoryView = nil;
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     cell.textLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:16];
-    cell.textLabel.textColor = [UIColor colorWithHexString:@"0x1d1d1d"];
     cell.textLabel.text = self.dataSource[indexPath.section][@"title"];
     cell.imageView.image = [UIImage imageNamed:self.dataSource[indexPath.section][@"image"]];
     if (indexPath.section == 0 && self.hasMoments) {

@@ -52,6 +52,10 @@
 
 #import "WFCUConfigManager.h"
 #import "WFCUSeletedUserViewController.h"
+
+#import "WFCUReceiptViewController.h"
+
+
 @interface WFCUMessageListViewController () <UITextFieldDelegate, UICollectionViewDelegateFlowLayout, UICollectionViewDataSource, UINavigationControllerDelegate, WFCUMessageCellDelegate, AVAudioPlayerDelegate, WFCUChatInputBarDelegate, SDPhotoBrowserDelegate, UIGestureRecognizerDelegate>
 @property (nonatomic, strong)NSMutableArray<WFCUMessageModel *> *modelList;
 @property (nonatomic, strong)NSMutableDictionary<NSNumber *, Class> *cellContentDict;
@@ -96,6 +100,9 @@
 @property (nonatomic, strong)NSTimer *showTypingTimer;
 
 @property (nonatomic, assign)BOOL isShowingKeyboard;
+
+@property (nonatomic, strong)NSMutableDictionary<NSString *, NSNumber *> *deliveryDict;
+@property (nonatomic, strong)NSMutableDictionary<NSString *, NSNumber *> *readDict;
 @end
 
 @implementation WFCUMessageListViewController
@@ -115,6 +122,12 @@
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onReceiveMessages:) name:kReceiveMessages object:nil];
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onRecallMessages:) name:kRecallMessages object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onDeleteMessages:) name:kDeleteMessages object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onMessageDelivered:) name:kMessageDelivered object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onMessageReaded:) name:kMessageReaded object:nil];
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onSendingMessage:) name:kSendingMessageStatusUpdated object:nil];
     
@@ -145,6 +158,13 @@
             }
         }];
         
+        [[NSNotificationCenter defaultCenter] addObserverForName:kGroupMemberUpdated object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+            if ([ws.conversation.target isEqualToString:note.object]) {
+                ws.targetGroup = ws.targetGroup;
+            }
+            
+        }];
+        
         self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"nav_chat_group"] style:UIBarButtonItemStyleDone target:self action:@selector(onRightBarBtn:)];
     } else if(self.conversation.type == Channel_Type) {
         [[NSNotificationCenter defaultCenter] addObserverForName:kChannelInfoUpdated object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
@@ -156,7 +176,7 @@
         self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"nav_chat_channel"] style:UIBarButtonItemStyleDone target:self action:@selector(onRightBarBtn:)];
     }
     
-    self.chatInputBar = [[WFCUChatInputBar alloc] initWithParentView:self.backgroundView conversation:self.conversation delegate:self];
+    self.chatInputBar = [[WFCUChatInputBar alloc] initWithSuperView:self.backgroundView conversation:self.conversation delegate:self];
     
     self.orignalDraft = [[WFCCIMService sharedWFCIMService] getConversationInfo:self.conversation].draft;
     
@@ -394,7 +414,8 @@
         self.navigationItem.backBarButtonItem.title = targetGroup.name;
     }
     ChatInputBarStatus defaultStatus = ChatInputBarDefaultStatus;
-    if (targetGroup.mute) {
+    WFCCGroupMember *member = [[WFCCIMService sharedWFCIMService] getGroupMember:targetGroup.target memberId:[WFCCNetworkService sharedInstance].userId];
+    if (targetGroup.mute || member.type == Member_Type_Muted) {
         if ([targetGroup.owner isEqualToString:[WFCCNetworkService sharedInstance].userId]) {
             self.chatInputBar.inputBarStatus =  defaultStatus;
         } else {
@@ -683,6 +704,145 @@
     }
 }
 
+- (void)onDeleteMessages:(NSNotification *)notification {
+    long long messageUid = [notification.object longLongValue];
+    for (int i = 0; i < self.modelList.count; i++) {
+        WFCUMessageModel *model = [self.modelList objectAtIndex:i];
+        if (model.message.messageUid == messageUid) {
+            [self.modelList removeObject:model];
+            [self.collectionView deleteItemsAtIndexPaths:@[[NSIndexPath indexPathForRow:i inSection:0]]];
+            break;
+        }
+    }
+}
+
+- (void)onMessageDelivered:(NSNotification *)notification {
+    if (self.conversation.type != Single_Type && self.conversation.type != Group_Type) {
+        return;
+    }
+    
+    NSArray<WFCCGroupMember *> *members = nil;
+    if (self.conversation.type == Group_Type) {
+        members = [[WFCCIMService sharedWFCIMService] getGroupMembers:self.conversation.target forceUpdate:NO];
+    }
+    
+    NSArray<WFCCDeliveryReport *> *delivereds = notification.object;
+    __block BOOL refresh = NO;
+    [delivereds enumerateObjectsUsingBlock:^(WFCCDeliveryReport * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if (self.conversation.type == Single_Type) {
+            if ([self.conversation.target isEqualToString:obj.userId]) {
+                *stop = YES;
+                refresh = YES;
+            }
+        }
+        if (self.conversation.type == Group_Type) {
+            for (WFCCGroupMember *member in members) {
+                if ([member.memberId isEqualToString:obj.userId]) {
+                    *stop = YES;
+                    refresh = YES;
+                }
+            }
+        }
+    }];
+    
+    if (refresh) {
+        self.deliveryDict = [[WFCCIMService sharedWFCIMService] getMessageDelivery:self.conversation];
+        WFCCGroupInfo *groupInfo = nil;
+
+        for (int i = 0; i < self.modelList.count; i++) {
+            WFCUMessageModel *model  = self.modelList[i];
+            model.deliveryDict = self.deliveryDict;
+            if (model.message.direction == MessageDirection_Receive || model.deliveryRate == 1.f) {
+                continue;
+            }
+            
+            if (self.conversation.type == Single_Type) {
+                if (model.message.serverTime <= [[model.deliveryDict objectForKey:model.message.conversation.target] longLongValue]) {
+                    float rate = 1.f;
+                    if (rate != model.deliveryRate) {
+                        model.deliveryRate = rate;
+                        [self.collectionView reloadItemsAtIndexPaths:@[[NSIndexPath indexPathForRow:i inSection:0]]];
+                    }
+                }
+            } else { //group
+                long long messageTS = model.message.serverTime;
+                __block int delieveriedCount = 0;
+                [model.deliveryDict enumerateKeysAndObjectsUsingBlock:^(NSString * _Nonnull key, NSNumber * _Nonnull obj, BOOL * _Nonnull stop) {
+                    if ([obj longLongValue] >= messageTS) {
+                        delieveriedCount++;
+                    }
+                }];
+                
+                if (!groupInfo) {
+                    groupInfo = [[WFCCIMService sharedWFCIMService] getGroupInfo:model.message.conversation.target refresh:NO];
+                }
+                
+                float rate = (float)delieveriedCount/(groupInfo.memberCount - 1);
+                if (rate != model.deliveryRate) {
+                    model.deliveryRate = rate;
+                    [self.collectionView reloadItemsAtIndexPaths:@[[NSIndexPath indexPathForRow:i inSection:0]]];
+                }
+            }
+        }
+    }
+}
+
+- (void)onMessageReaded:(NSNotification *)notification {
+    if (self.conversation.type != Single_Type && self.conversation.type != Group_Type) {
+        return;
+    }
+    
+    NSArray<WFCCReadReport *> *readeds = notification.object;
+    __block BOOL refresh = NO;
+    [readeds enumerateObjectsUsingBlock:^(WFCCReadReport * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if ([obj.conversation isEqual:self.conversation]) {
+            *stop = YES;
+            refresh = YES;
+        }
+    }];
+    
+    if (refresh) {
+        self.readDict = [[WFCCIMService sharedWFCIMService] getConversationRead:self.conversation];
+        WFCCGroupInfo *groupInfo = nil;
+
+        for (int i = 0; i < self.modelList.count; i++) {
+            WFCUMessageModel *model  = self.modelList[i];
+            model.readDict = self.readDict;
+            if (model.message.direction == MessageDirection_Receive || model.readRate == 1.f) {
+                continue;
+            }
+            
+            if (self.conversation.type == Single_Type) {
+                if (model.message.serverTime <= [[model.readDict objectForKey:model.message.conversation.target] longLongValue]) {
+                    float rate = 1.f;
+                    if (rate != model.readRate) {
+                        model.readRate = rate;
+                        [self.collectionView reloadItemsAtIndexPaths:@[[NSIndexPath indexPathForRow:i inSection:0]]];
+                    }
+                }
+            } else { //group
+                long long messageTS = model.message.serverTime;
+                __block int delieveriedCount = 0;
+                [model.readDict enumerateKeysAndObjectsUsingBlock:^(NSString * _Nonnull key, NSNumber * _Nonnull obj, BOOL * _Nonnull stop) {
+                    if ([obj longLongValue] >= messageTS) {
+                        delieveriedCount++;
+                    }
+                }];
+                
+                if (!groupInfo) {
+                    groupInfo = [[WFCCIMService sharedWFCIMService] getGroupInfo:model.message.conversation.target refresh:NO];
+                }
+                
+                float rate = (float)delieveriedCount/(groupInfo.memberCount - 1);
+                if (rate != model.readRate) {
+                    model.readRate = rate;
+                    [self.collectionView reloadItemsAtIndexPaths:@[[NSIndexPath indexPathForRow:i inSection:0]]];
+                }
+            }
+        }
+    }
+}
+
 #if WFCU_SUPPORT_VOIP
 - (void)onCallStateChanged:(NSNotification *)notification {
     long long messageUid = [[notification.userInfo objectForKey:@"messageUid"] longLongValue];
@@ -724,6 +884,9 @@
 }
 
 - (void)reloadMessageList {
+    self.deliveryDict = [[WFCCIMService sharedWFCIMService] getMessageDelivery:self.conversation];
+    self.readDict = [[WFCCIMService sharedWFCIMService] getConversationRead:self.conversation];
+    
     NSArray *messageList;
     if (self.highlightMessageId > 0) {
         NSArray *messageListOld = [[WFCCIMService sharedWFCIMService] getMessages:self.conversation contentTypes:nil from:self.highlightMessageId+1 count:15 withUser:self.privateChatUser];
@@ -737,7 +900,7 @@
             self.hasNewMessage = YES;
         }
     } else {
-        int count = self.modelList.count;
+        int count = (int)self.modelList.count;
         if (count > 50) {
             count = 50;
         } else if(count == 0) {
@@ -800,7 +963,13 @@
             if (highlightId > 0 && message.messageId == highlightId) {
                 model.highlighted = YES;
             }
+            
+            model.deliveryDict = self.deliveryDict;
+            model.readDict = self.readDict;
             [self.modelList addObject:model];
+            if (messages.count == 1) {
+                [self.collectionView insertItemsAtIndexPaths:@[[NSIndexPath indexPathForItem:self.modelList.count - 1 inSection:0]]];
+            }
         } else {
             if (self.modelList.count > 0 && (self.modelList[0].message.serverTime - message.serverTime < 60 * 1000) && i != 0) {
                 self.modelList[0].showTimeLabel = NO;
@@ -809,6 +978,9 @@
             if (highlightId > 0 && message.messageId == highlightId) {
                 model.highlighted = YES;
             }
+            
+            model.deliveryDict = self.deliveryDict;
+            model.readDict = self.readDict;
             [self.modelList insertObject:model atIndex:0];
         }
     }
@@ -829,8 +1001,11 @@
             isAtButtom = YES;
         }
     }
-    
-    [self.collectionView reloadData];
+    if (newMessage && messages.count == 1) {
+        NSLog(@"alread reload the message");
+    } else {
+        [self.collectionView reloadData];
+    }
     if (newMessage || self.modelList.count == messages.count) {
         if(isAtButtom) {
             forceButtom = true;
@@ -1176,6 +1351,11 @@
     WFCCRecallMessageContent *recall = (WFCCRecallMessageContent *)model.message.content;
     [self.chatInputBar appendText:recall.originalSearchableContent];
 }
+- (void)didTapReceiptView:(WFCUMessageCellBase *)cell withModel:(WFCUMessageModel *)model {
+    WFCUReceiptViewController *receipt = [[WFCUReceiptViewController alloc] init];
+    receipt.message = model.message;
+    [self.navigationController pushViewController:receipt animated:YES];
+}
 #pragma mark - AVAudioPlayerDelegate
 - (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
     NSLog(@"player finished");
@@ -1337,7 +1517,8 @@
         [disabledUser addObject:[WFCCNetworkService sharedInstance].userId];
         vc.disableUserIds = disabledUser;
         vc.maxSelectCount = isAudioOnly ? [WFAVEngineKit sharedEngineKit].maxAudioCallCount : [WFAVEngineKit sharedEngineKit].maxVideoCallCount;
-        vc.maxSelectCount -= 1;
+        vc.groupId = self.targetGroup.target;
+//        vc.maxSelectCount -= 1;
         NSMutableArray *candidateUser = [[NSMutableArray alloc] init];
         NSArray<WFCCGroupMember *> *members = [[WFCCIMService sharedWFCIMService] getGroupMembers:self.conversation.target forceUpdate:NO];
         for (WFCCGroupMember *member in members) {
@@ -1512,10 +1693,22 @@
     [self.chatInputBar paste:sender];
 }
 
+- (void)deleteMessageUI:(WFCCMessage *)message {
+    for (int i = 0; i < self.modelList.count; i++) {
+        WFCUMessageModel *model = [self.modelList objectAtIndex:i];
+        if (model.message.messageUid == message.messageUid) {
+            [self.modelList removeObject:model];
+            [self.collectionView deleteItemsAtIndexPaths:@[[NSIndexPath indexPathForRow:i inSection:0]]];
+            break;
+        }
+    }
+}
+
 -(void)performDelete:(UIMenuController *)sender {
-    [[WFCCIMService sharedWFCIMService] deleteMessage:self.cell4Menu.model.message.messageId];
-    [self.modelList removeObject:self.cell4Menu.model];
-    [self.collectionView deleteItemsAtIndexPaths:@[[self.collectionView indexPathForCell:self.cell4Menu]]];
+    __weak typeof(self)ws = self;
+    WFCCMessage *message = self.cell4Menu.model.message;
+    [[WFCCIMService sharedWFCIMService] deleteMessage:message.messageId];
+    [ws deleteMessageUI:message];
 }
 
 -(void)performCopy:(UIMenuItem *)sender {

@@ -23,7 +23,7 @@
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, frame.size.width, frame.size.height)];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
-    self.tableView.backgroundColor = [UIColor colorWithHexString:@"0xededed"];
+    self.tableView.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
     self.tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectZero];
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
     self.tableView.tableHeaderView = nil;
@@ -62,7 +62,7 @@
         cell.textLabel.text = @"白色";
     }
     
-    if ([WFCUConfigManager globalManager].themeType == indexPath.row) {
+    if ([WFCUConfigManager globalManager].selectedTheme == indexPath.row) {
         cell.checked = YES;
     } else {
         cell.checked = NO;
@@ -77,8 +77,8 @@
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (indexPath.row != [WFCUConfigManager globalManager].themeType) {
-        [WFCUConfigManager globalManager].themeType = indexPath.row;
+    if (indexPath.row != [WFCUConfigManager globalManager].selectedTheme) {
+        [WFCUConfigManager globalManager].selectedTheme = indexPath.row;
         [self.tableView reloadData];
         [self displayUpdatedAlert];
     }

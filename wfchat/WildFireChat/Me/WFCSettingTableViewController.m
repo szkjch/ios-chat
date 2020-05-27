@@ -30,7 +30,7 @@
     
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
-    self.tableView.backgroundColor = [UIColor colorWithHexString:@"0xededed"];
+    self.tableView.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
     self.title = LocalizedString(@"Settings");
     self.tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 0.1)];
     [self.tableView reloadData];
@@ -115,12 +115,16 @@
     }
 }
 
+- (void)tableView:(UITableView *)tableView willDisplayHeaderView:(UIView *)view forSection:(NSInteger)section {
+    view.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
+}
+
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
     if (section == 0) {
         return nil;
     } else {
         UIView *v = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 9)];
-        v.backgroundColor = [UIColor colorWithHexString:@"0xededed"];
+        v.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
         return v;
     }
 
@@ -243,7 +247,8 @@
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"savedName"];
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"savedToken"];
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"savedUserId"];
-  //不要清除session，这样再次登录时能够保留历史记录。如果需要清除掉本地历史记录和服务器信息这里使用YES
-    [[WFCCNetworkService sharedInstance] disconnect:NO];
+    //退出后就不需要推送了，第一个参数为YES
+    //如果希望再次登录时能够保留历史记录，第二个参数为NO。如果需要清除掉本地历史记录第二个参数用YES
+    [[WFCCNetworkService sharedInstance] disconnect:YES clearSession:NO];
 }
 @end

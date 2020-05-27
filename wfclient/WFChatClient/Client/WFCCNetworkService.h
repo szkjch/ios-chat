@@ -11,6 +11,8 @@
 
 #import <Foundation/Foundation.h>
 #import "WFCCMessage.h"
+#import "WFCCReadReport.h"
+#import "WFCCDeliveryReport.h"
 
 extern const NSString *SDKVERSION;
 #pragma mark - 通知定义
@@ -98,6 +100,20 @@ typedef NS_ENUM(NSInteger, ConnectionStatus) {
 
 @optional
 - (void)onRecallMessage:(long long)messageUid;
+- (void)onDeleteMessage:(long long)messageUid;
+
+/**
+消息已送达到目标用户的回调
+
+@param delivereds 送达报告
+*/
+
+- (void)onMessageDelivered:(NSArray<WFCCDeliveryReport *> *)delivereds;
+
+/**
+消息已读的监听
+*/
+- (void)onMessageReaded:(NSArray<WFCCReadReport *> *)readeds;
 @end
 
 /**
@@ -192,9 +208,10 @@ typedef NS_ENUM(NSInteger, ConnectionStatus) {
 /**
  断开连接
 
- @param clearSession 是否清除Session信息
+ @param disablePush   是否停止推送，clearSession为YES时无意义。
+ @param clearSession 是否清除Session信息，如果清楚本地历史消息将全部清除。
  */
-- (void)disconnect:(BOOL)clearSession;
+- (void)disconnect:(BOOL)disablePush clearSession:(BOOL)clearSession;
 
 /**
  设置服务器信息。host可以是IP，可以是域名，如果是域名的话只支持主域名或www域名，二级域名不支持！

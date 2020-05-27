@@ -27,6 +27,10 @@ extern NSString *kSendingMessageStatusUpdated;
 extern NSString *kConnectionStatusChanged;
 extern NSString *kReceiveMessages;
 extern NSString *kRecallMessages;
+extern NSString *kDeleteMessages;
+extern NSString *kMessageDelivered;
+extern NSString *kMessageReaded;
+
 #pragma mark - 枚举值定义
 /**
  修改个人信息的内容
@@ -102,6 +106,12 @@ typedef NS_ENUM(NSInteger, UserSettingScope) {
     
     //不能直接使用，协议栈内会使用此值
     UserSettingScope_PC_Online = 10,
+    //不能直接使用，协议栈内会使用此值
+    UserSetting_Conversation_Readed = 11,
+    //不能直接使用，协议栈内会使用此值
+    UserSetting_WebOnline = 12,
+    //不能直接使用，协议栈内会使用此值
+    UserSetting_DisableRecipt = 13,
     
     
     //自定义用户设置，请使用1000以上的key
@@ -246,6 +256,15 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
 - (void)setConversation:(WFCCConversation *)conversation
                   draft:(NSString *)draft;
 
+/**
+ 更新会话的时间
+ 
+ @param conversation 会话
+ @param timestamp 时间戳
+ */
+- (void)setConversation:(WFCCConversation *)conversation
+              timestamp:(long long)timestamp;
+
 #pragma mark - 未读数相关
 /**
  获取指定类型会话的未读数
@@ -284,6 +303,11 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
  设置媒体消息已播放（已经放开限制，所有消息都可以设置为已读状态）
  */
 - (void)setMediaMessagePlayed:(long)messageId;
+
+- (NSMutableDictionary<NSString *, NSNumber *> *)getConversationRead:(WFCCConversation *)conversation;
+- (NSMutableDictionary<NSString *, NSNumber *> *)getMessageDelivery:(WFCCConversation *)conversation;
+- (long long)getMessageDeliveryByUser:(NSString *)userId;
+
 #pragma mark - 消息相关
 /**
  获取消息
@@ -477,6 +501,20 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
                    success:(void(^)(long long messageUid, long long timestamp))successBlock
                   progress:(void(^)(long uploaded, long total))progressBlock
                      error:(void(^)(int error_code))errorBlock;
+
+/**
+ 发送已保存消息，消息状态必须是发送中或者发送失败
+
+ @param message 已经存储在本地待发送的消息
+ @param expireDuration 消息的有效期，0不限期，单位秒
+ @param successBlock 成功的回调
+ @param errorBlock 失败的回调
+ @return 协议栈是否可以发送
+ */
+- (BOOL)sendSavedMessage:(WFCCMessage *)message
+          expireDuration:(int)expireDuration
+                 success:(void(^)(long long messageUid, long long timestamp))successBlock
+                   error:(void(^)(int error_code))errorBlock;
 /**
  撤回消息
  
@@ -530,7 +568,7 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
  @param messageId 消息ID
  @return 是否删除成功
  */
-- (BOOL)deleteMessage:(long)messageId;
+- (void)deleteMessage:(long)messageId;
 
 /**
  删除会话中的消息
@@ -973,7 +1011,7 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
  
  @param groupId 群ID
  @param isSet    设置或取消
- @param memberId    成员ID
+ @param memberIds    成员ID
  @param notifyLines 默认传 @[@(0)]
  @param notifyContent 通知消息
  @param successBlock 成功的回调
@@ -981,11 +1019,30 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
  */
 - (void)setGroupManager:(NSString *)groupId
                   isSet:(BOOL)isSet
-              memberIds:(NSArray<NSString *> *)memberId
+              memberIds:(NSArray<NSString *> *)memberIds
             notifyLines:(NSArray<NSNumber *> *)notifyLines
           notifyContent:(WFCCMessageContent *)notifyContent
                 success:(void(^)(void))successBlock
                   error:(void(^)(int error_code))errorBlock;
+
+/**
+ 设置群成员禁言，仅专业版支持
+ 
+ @param groupId 群ID
+ @param isSet    设置或取消
+ @param memberIds    成员ID
+ @param notifyLines 默认传 @[@(0)]
+ @param notifyContent 通知消息
+ @param successBlock 成功的回调
+ @param errorBlock 失败的回调
+ */
+- (void)muteGroupMember:(NSString *)groupId
+                     isSet:(BOOL)isSet
+                 memberIds:(NSArray<NSString *> *)memberIds
+               notifyLines:(NSArray<NSNumber *> *)notifyLines
+             notifyContent:(WFCCMessageContent *)notifyContent
+                   success:(void(^)(void))successBlock
+                     error:(void(^)(int error_code))errorBlock;
 /**
  获取当前用户收藏的群组
  
@@ -1057,20 +1114,78 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
 
 
 
+/**
+是否全局静音
 
+@return YES，当前用户全局静音；NO，没有全局静音
+*/
 - (BOOL)isGlobalSlient;
+
+/**
+修改全局静音状态
+
+@param slient 是否静音
+@param successBlock 成功的回调
+@param errorBlock 失败的回调
+*/
 - (void)setGlobalSlient:(BOOL)slient
                 success:(void(^)(void))successBlock
                   error:(void(^)(int error_code))errorBlock;
+
+/**
+是否隐藏推送详情
+
+@return YES，隐藏推送详情，提示“您收到一条消息”；NO，推送显示消息摘要
+*/
 - (BOOL)isHiddenNotificationDetail;
+
+/**
+修改全局静音状态
+
+@param hidden 是否静音
+@param successBlock 成功的回调
+@param errorBlock 失败的回调
+*/
 - (void)setHiddenNotificationDetail:(BOOL)hidden
                             success:(void(^)(void))successBlock
                               error:(void(^)(int error_code))errorBlock;
+
+/**
+是否隐藏群组会话中群成员昵称显示
+
+@return YES，群组会话中不显示群成员昵称；NO，显示
+*/
 - (BOOL)isHiddenGroupMemberName:(NSString *)groupId;
+
+/**
+修改隐藏群组会话中群成员昵称显示状态
+
+@param hidden 是否隐藏
+@param successBlock 成功的回调
+@param errorBlock 失败的回调
+*/
 - (void)setHiddenGroupMemberName:(BOOL)hidden
                            group:(NSString *)groupId
                          success:(void(^)(void))successBlock
                            error:(void(^)(int error_code))errorBlock;
+/**
+当前用户是否启用消息回执功能，仅专业版有效
+
+@return YES，开启消息回执功能；NO，关闭个人的消息回执功能。
+@disscussion 仅当服务器开启这个功能才有效
+*/
+- (BOOL)isUserEnableReceipt;
+/**
+修改当前用户是否启用消息回执功能，仅专业版有效
+
+@param enable 是否开启
+@param successBlock 成功的回调
+@param errorBlock 失败的回调
+ @disscussion 仅当服务器开启这个功能才有效
+*/
+- (void)setUserEnableReceipt:(BOOL)enable
+                success:(void(^)(void))successBlock
+                       error:(void(^)(int error_code))errorBlock;
 
 #pragma mark - 聊天室相关
 - (void)joinChatroom:(NSString *)chatroomId
@@ -1186,6 +1301,28 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
 - (NSArray<WFCCPCOnlineInfo *> *)getPCOnlineInfos;
 
 /**
+踢掉PC或者Web
+
+@param pcClientId PC或Web端的clientId
+@param successBlock 成功的回调
+@param errorBlock 失败的回调
+*/
+- (void)kickoffPCClient:(NSString *)pcClientId
+                success:(void(^)(void))successBlock
+                  error:(void(^)(int error_code))errorBlock;
+/**
+获取媒体文件授权访问地址
+
+@param mediaType 媒体类型
+@param mediaPath 媒体Path
+@param successBlock 成功的回调
+@param errorBlock 失败的回调
+*/
+- (void)getAuthorizedMediaUrl:(WFCCMediaType)mediaType
+                    mediaPath:(NSString *)mediaPath
+                      success:(void(^)(NSString *authorizedUrl))successBlock
+                        error:(void(^)(int error_code))errorBlock;
+/**
  获取图片缩略图参数
  
  @return 图片缩略图参数
@@ -1205,4 +1342,14 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
  
 */
 - (void)commitTransaction;
+
+/**
+ 是否是商业版IM服务。
+ */
+- (BOOL)isCommercialServer;
+
+/**
+是否支持已送达报告和已阅读报告
+*/
+- (BOOL)isReceiptEnabled;
 @end

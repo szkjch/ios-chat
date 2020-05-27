@@ -70,7 +70,6 @@ alpha:1.0]
     UILabel *userNameLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 52, inputHeight - 1)];
     userNameLabel.text = @"手机号";
     userNameLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:17];
-    userNameLabel.textColor = [UIColor colorWithHexString:@"0x191919"];
     
     self.userNameLine = [[UIView alloc] initWithFrame:CGRectMake(0, inputHeight - 1, userNameContainer.frame.size.width, 1.f)];
     self.userNameLine.backgroundColor = [UIColor colorWithHexString:@"0xd4d4d4"];
@@ -91,7 +90,6 @@ alpha:1.0]
     UILabel *passwordLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 52, inputHeight - 1)];
     passwordLabel.text = @"验证码";
     passwordLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:17];
-    passwordLabel.textColor = [UIColor colorWithHexString:@"0x191919"];
     
     
     self.passwordLine = [[UIView alloc] initWithFrame:CGRectMake(0, inputHeight - 1, passwordContainer.frame.size.width, 1.f)];
@@ -149,19 +147,19 @@ alpha:1.0]
     
     [self.view addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(resetKeyboard:)]];
     
-    self.privacyLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, self.view.bounds.size.height - 28 - kTabbarSafeBottomMargin, self.view.bounds.size.width-32, 28)];
+    self.privacyLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, self.view.bounds.size.height - 40 - kTabbarSafeBottomMargin, self.view.bounds.size.width-32, 40)];
     self.privacyLabel.textAlignment = NSTextAlignmentCenter;
-    NSMutableAttributedString *text = [[NSMutableAttributedString alloc] initWithString:@"登录即代表你已同意《野火IM用户协议》和《野火IM隐私政策》" attributes:@{NSFontAttributeName : [UIFont systemFontOfSize:10],
+    NSMutableAttributedString *text = [[NSMutableAttributedString alloc] initWithString:@"登录即代表你已同意《野火通用户协议》和《野火通隐私政策》" attributes:@{NSFontAttributeName : [UIFont systemFontOfSize:10],
                                                                                                                      NSForegroundColorAttributeName : [UIColor darkGrayColor]}];
     [text setAttributes:@{NSFontAttributeName : [UIFont systemFontOfSize:10],
-                          NSForegroundColorAttributeName : [UIColor blueColor]} range:NSMakeRange(9, 10)];
+                          NSForegroundColorAttributeName : [UIColor blueColor]} range:NSMakeRange(9, 9)];
     [text setAttributes:@{NSFontAttributeName : [UIFont systemFontOfSize:10],
-                          NSForegroundColorAttributeName : [UIColor blueColor]} range:NSMakeRange(20, 10)];
+                          NSForegroundColorAttributeName : [UIColor blueColor]} range:NSMakeRange(19, 9)];
     self.privacyLabel.attributedText = text ;
     __weak typeof(self)ws = self;
-    [self.privacyLabel yb_addAttributeTapActionWithRanges:@[NSStringFromRange(NSMakeRange(9, 8)), NSStringFromRange(NSMakeRange(18, 8))] tapClicked:^(UILabel *label, NSString *string, NSRange range, NSInteger index) {
+    [self.privacyLabel yb_addAttributeTapActionWithRanges:@[NSStringFromRange(NSMakeRange(9, 9)), NSStringFromRange(NSMakeRange(19, 9))] tapClicked:^(UILabel *label, NSString *string, NSRange range, NSInteger index) {
         WFCPrivacyViewController * pvc = [[WFCPrivacyViewController alloc] init];
-        pvc.isPrivacy = (range.location == 18);
+        pvc.isPrivacy = (range.location == 19);
         [ws.navigationController pushViewController:pvc animated:YES];
     }];
     

@@ -41,6 +41,18 @@ UISearchBarDelegate>
 #pragma mark - Life Circle
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.selectedUsers = [[NSMutableArray alloc] init];
+    for (NSString *defaultUserId in self.disableUserIds) {
+        WFCUSelectedUserInfo *defaultUser = [[WFCUSelectedUserInfo alloc] init];
+        defaultUser.selectedStatus = Disable;
+        WFCCUserInfo *userInfo = [[WFCCIMService sharedWFCIMService] getUserInfo:defaultUserId inGroup:self.groupId refresh:NO];
+        defaultUser.userId = defaultUserId;
+        defaultUser.displayName = userInfo.displayName;
+        defaultUser.groupAlias = userInfo.groupAlias;
+        defaultUser.friendAlias = userInfo.friendAlias;
+        defaultUser.portrait = userInfo.portrait;
+        [self.selectedUsers addObject:defaultUser];
+    }
     [self loadData];
     [self setUpUI];
 }
@@ -236,7 +248,6 @@ UISearchBarDelegate>
 
 - (void)loadData {
     self.dataSource = [NSMutableArray new];
-    self.selectedUsers = [NSMutableArray new];
     NSArray *userDataSource = nil;
     
     if (self.inputData) {
@@ -366,7 +377,9 @@ UISearchBarDelegate>
     [[WFCUConfigManager globalManager] setupNavBar];
     NSMutableArray *selectedUserIds = [NSMutableArray new];
     for (WFCUSelectedUserInfo *user in self.selectedUsers) {
-        [selectedUserIds addObject:user.userId];
+        if (user.selectedStatus == Checked) {
+            [selectedUserIds addObject:user.userId];
+        }
     }
     self.selectResult(selectedUserIds);
     [self dismissViewControllerAnimated:NO completion:nil];
